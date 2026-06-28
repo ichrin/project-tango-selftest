@@ -117,32 +117,42 @@ class QuizApp:
                 return "接"
         return "其他"
     
+    def clean_reading(self, reading):
+        """去除读音中的声调数字和括号，只保留假名"""
+        if not reading:
+            return ""
+        clean = re.sub(r'[①②③④⑤⑥⑦⑧⑨⑩]', '', reading)
+        clean = re.sub(r'[（(][^）)]*[）)]', '', clean)
+        clean = clean.strip()
+        return clean
+    
     def is_kana_word(self, text):
         clean = re.sub(r'[（(）).]', '', text)
-        kana_pattern = re.compile(r'^[\u30A0-\u30FF\u30FC]+$')
+        kana_pattern = re.compile(r'^[\u3040-\u309F\u30A0-\u30FF\u30FC]+$')
         return bool(kana_pattern.match(clean))
     
     def is_katakana_word(self, text):
-        """判断是否为纯片假名单词（外来语）"""
         clean = re.sub(r'[（(）).]', '', text)
         katakana_pattern = re.compile(r'^[\u30A0-\u30FF\u30FC]+$')
         return bool(katakana_pattern.match(clean))
     
+    def has_kanji(self, text):
+        kanji_pattern = re.compile(r'[\u4E00-\u9FFF]')
+        return bool(kanji_pattern.search(text))
+    
     def has_reading(self, word):
-        if self.is_kana_word(word['jp']):
+        if not self.has_kanji(word['jp']):
             return False
         if not word['reading'] or word['reading'].strip() == '':
+            return False
+        clean = self.clean_reading(word['reading'])
+        if not clean:
             return False
         return True
     
     def is_kanji_word(self, text):
         kanji_pattern = re.compile(r'[\u4E00-\u9FFF]')
         return bool(kanji_pattern.search(text))
-    
-    def get_reading_for_display(self, reading):
-        clean = re.sub(r'[⓪①②③④⑤⑥⑦⑧⑨⑩]', '', reading)
-        clean = re.sub(r'[（(）).]', '', clean)
-        return clean.strip()
     
     def get_word_key(self, word):
         return f"{word['jp']}|{word['cn']}"
@@ -201,7 +211,6 @@ class QuizApp:
         # --- 左侧控制区 ---
         tk.Label(left_frame, text="测验模式:", font=("微软雅黑", 10, "bold")).pack(anchor=tk.W, pady=(0,5))
         
-        # 第一行模式
         mode_frame1 = tk.Frame(left_frame)
         mode_frame1.pack(anchor=tk.W, fill=tk.X)
         self.mode_var = tk.StringVar(value="jp2cn")
@@ -210,7 +219,6 @@ class QuizApp:
             tk.Radiobutton(mode_frame1, text=t, variable=self.mode_var, 
                           value=v, command=self.set_mode).pack(side=tk.LEFT, padx=2)
         
-        # 第二行模式
         mode_frame2 = tk.Frame(left_frame)
         mode_frame2.pack(anchor=tk.W, fill=tk.X)
         modes2 = [("读音", "reading"), ("假名->汉字", "kana2kanji")]
@@ -218,7 +226,6 @@ class QuizApp:
             tk.Radiobutton(mode_frame2, text=t, variable=self.mode_var, 
                           value=v, command=self.set_mode).pack(side=tk.LEFT, padx=2)
         
-        # 第三行：外来语模式
         mode_frame3 = tk.Frame(left_frame)
         mode_frame3.pack(anchor=tk.W, fill=tk.X)
         tk.Label(mode_frame3, text="【外来语】", fg="purple", font=("微软雅黑", 9, "bold")).pack(side=tk.LEFT, padx=2)
@@ -229,7 +236,6 @@ class QuizApp:
         
         tk.Frame(left_frame, height=10).pack()
         
-        # 词性筛选区域
         self.pos_frame = tk.LabelFrame(left_frame, text="词性筛选 (仅词性模式)", font=("微软雅黑", 9))
         self.pos_frame.pack(fill=tk.X, pady=5)
         
@@ -380,33 +386,34 @@ class QuizApp:
         }
         new_mode = mode_map.get(self.mode_var.get(), 0)
         
-        # 外来语模式检查
         if new_mode in [5, 6]:
             kata_words = [w for w in self.all_words if self.is_katakana_word(w['jp'])]
-            if len(kata_words) < 3:
-                messagebox.showwarning("提示", "当前词库中片假名单词（外来语）不足3个")
+            if len(kata_words) < 4:
+                messagebox.showwarning("提示", "当前词库中片假名单词（外来语）不足4个，无法生成4个选项")
                 return
         
         if new_mode == 3:
-            has_reading_words = [w for w in self.all_words if self.has_reading(w)]
-            if len(has_reading_words) < 5:
-                messagebox.showwarning("提示", "当前词库中可考读音的单词不足5个")
+            reading_words = [w for w in self.all_words if self.has_reading(w)]
+            if len(reading_words) < 4:
+                messagebox.showwarning("提示", f"当前词库中可用于读音测试的单词（含汉字的词）不足4个（当前{len(reading_words)}个），无法生成4个选项")
                 return
         
         if new_mode == 4:
             kanji_words = [w for w in self.all_words if self.is_kanji_word(w['jp']) and self.has_reading(w)]
-            if len(kanji_words) < 5:
-                messagebox.showwarning("提示", "当前词库中可考汉字的单词不足5个")
+            if len(kanji_words) < 4:
+                messagebox.showwarning("提示", "当前词库中可考汉字的单词不足4个，无法生成4个选项")
                 return
         
         self.is_wrong_mode = False
         self.mode_hint.config(text="")
         
-        # 外来语模式提示
         if new_mode == 5:
             self.mode_hint.config(text="【外来语 日译中】", fg="purple")
         elif new_mode == 6:
             self.mode_hint.config(text="【外来语 中译日】", fg="purple")
+        elif new_mode == 3:
+            reading_words = [w for w in self.all_words if self.has_reading(w)]
+            self.mode_hint.config(text=f"【读音测试】可用单词: {len(reading_words)} 个", fg="blue")
         
         self.mode = new_mode
         
@@ -416,7 +423,7 @@ class QuizApp:
             self.pos_count_lb.config(text=f"当前筛选: {len(pool)} 个单词")
         else:
             self.pos_count_lb.config(text="")
-            if new_mode not in [5, 6]:
+            if new_mode not in [5, 6, 3]:
                 self.pos_stat_lb.config(text="")
         
         self.restart()
@@ -446,13 +453,13 @@ class QuizApp:
             cnt = self.load_csv_file(f)
             total += cnt
         
-        self.file_lb.config(text=f"CSV: {len(files)}  |  词数: {total}", fg="blue")
+        kata_cnt = len([w for w in self.all_words if self.is_katakana_word(w['jp'])])
+        reading_cnt = len([w for w in self.all_words if self.has_reading(w)])
+        
+        self.file_lb.config(text=f"CSV: {len(files)}  |  词数: {total}  |  外来语: {kata_cnt}  |  可读音: {reading_cnt}", fg="blue")
         self.mastered_lb.config(text=f"已掌握: {len(self.mastered_words)} 个", fg="green")
         
         if self.all_words:
-            # 统计外来语数量
-            kata_cnt = len([w for w in self.all_words if self.is_katakana_word(w['jp'])])
-            self.file_lb.config(text=f"CSV: {len(files)}  |  词数: {total}  |  外来语: {kata_cnt}", fg="blue")
             self.update_pos_stats()
             self.restart()
         else:
@@ -513,6 +520,8 @@ class QuizApp:
         
         if self.mode == 2:
             self.pos_count_lb.config(text=f"当前筛选: {len(pool)} 个单词")
+        elif self.mode == 3:
+            self.pos_count_lb.config(text=f"读音测试可用: {len(pool)} 个单词", fg="blue")
         
         if not pool:
             msg = "当前没有可用的单词"
@@ -534,6 +543,10 @@ class QuizApp:
                     msg += "（请至少选择一个词性）"
                     messagebox.showwarning("提示", msg)
                     return
+            elif self.mode == 3:
+                msg += "（请检查CSV中是否有包含汉字的单词）"
+                messagebox.showwarning("提示", msg)
+                return
             elif self.mode in [5, 6]:
                 msg += "（请检查CSV中是否有片假名单词）"
                 messagebox.showwarning("提示", msg)
@@ -603,7 +616,7 @@ class QuizApp:
         elif mode == 3:
             return f"第{self.idx+1}题（共{self.total}题） 选择正确的读音：\n\n{w['jp']}"
         elif mode == 4:
-            reading_display = self.get_reading_for_display(w['reading'])
+            reading_display = self.clean_reading(w['reading'])
             return f"第{self.idx+1}题（共{self.total}题） 选择对应的日语（汉字）：\n\n【{reading_display}】"
         elif mode == 5:
             return f"第{self.idx+1}题（共{self.total}题） 【外来语】选择正确的中文释义：\n\n{w['jp']}"
@@ -623,11 +636,16 @@ class QuizApp:
                     wrong.append(p['cn'])
                 if len(wrong) >= 3:
                     break
-            while len(wrong) < 3:
-                wrong.append("---")
+            if len(wrong) < 3:
+                for p in self.all_words:
+                    if p['cn'] != correct and p['cn'] not in wrong:
+                        wrong.append(p['cn'])
+                    if len(wrong) >= 3:
+                        break
             opts = [correct] + wrong[:3]
             random.shuffle(opts)
             return opts
+        
         elif mode == 1:
             correct = w['jp']
             wrong = []
@@ -636,11 +654,16 @@ class QuizApp:
                     wrong.append(p['jp'])
                 if len(wrong) >= 3:
                     break
-            while len(wrong) < 3:
-                wrong.append("---")
+            if len(wrong) < 3:
+                for p in self.all_words:
+                    if p['jp'] != correct and p['jp'] not in wrong:
+                        wrong.append(p['jp'])
+                    if len(wrong) >= 3:
+                        break
             opts = [correct] + wrong[:3]
             random.shuffle(opts)
             return opts
+        
         elif mode == 2:
             correct = w['pos']
             wrong = []
@@ -649,65 +672,119 @@ class QuizApp:
                     wrong.append(p['pos'])
                 if len(wrong) >= 3:
                     break
-            while len(wrong) < 3:
-                wrong.append("---")
+            if len(wrong) < 3:
+                for p in self.all_words:
+                    if p['pos'] != correct and p['pos'] not in wrong and p['pos']:
+                        wrong.append(p['pos'])
+                    if len(wrong) >= 3:
+                        break
             opts = [correct] + wrong[:3]
             random.shuffle(opts)
             return opts
+        
         elif mode == 3:
-            correct = w['reading']
-            reading_pool = [p for p in base_pool if p['reading'] and p['reading'].strip() != '']
+            correct = self.clean_reading(w['reading'])
+            
+            reading_pool = []
+            seen_readings = set()
+            for p in base_pool:
+                if self.has_reading(p):
+                    clean_r = self.clean_reading(p['reading'])
+                    if clean_r and clean_r not in seen_readings:
+                        seen_readings.add(clean_r)
+                        reading_pool.append(clean_r)
+            for p in self.all_words:
+                if self.has_reading(p):
+                    clean_r = self.clean_reading(p['reading'])
+                    if clean_r and clean_r not in seen_readings:
+                        seen_readings.add(clean_r)
+                        reading_pool.append(clean_r)
+            
             wrong = []
-            for p in reading_pool:
-                if p['reading'] != correct and p['reading'] not in wrong:
-                    wrong.append(p['reading'])
+            for r in reading_pool:
+                if r != correct and r not in wrong:
+                    wrong.append(r)
                 if len(wrong) >= 3:
                     break
-            while len(wrong) < 3:
-                wrong.append("---")
+            
             opts = [correct] + wrong[:3]
             random.shuffle(opts)
             return opts
+        
         elif mode == 4:
             correct = w['jp']
-            kanji_pool = [p for p in base_pool if self.is_kanji_word(p['jp']) and self.has_reading(p)]
+            kanji_pool = []
+            seen_words = set()
+            for p in base_pool:
+                if self.is_kanji_word(p['jp']) and self.has_reading(p):
+                    key = p['jp']
+                    if key not in seen_words:
+                        seen_words.add(key)
+                        kanji_pool.append(p)
+            for p in self.all_words:
+                if self.is_kanji_word(p['jp']) and self.has_reading(p):
+                    key = p['jp']
+                    if key not in seen_words:
+                        seen_words.add(key)
+                        kanji_pool.append(p)
             wrong = []
             for p in kanji_pool:
                 if p['jp'] != correct and p['jp'] not in wrong:
                     wrong.append(p['jp'])
                 if len(wrong) >= 3:
                     break
-            while len(wrong) < 3:
-                wrong.append("---")
             opts = [correct] + wrong[:3]
             random.shuffle(opts)
             return opts
+        
         elif mode == 5:
-            # 外来语 日译中
             correct = w['cn']
-            kata_pool = [p for p in base_pool if self.is_katakana_word(p['jp'])]
+            kata_pool = []
+            seen_cn = set()
+            for p in base_pool:
+                if self.is_katakana_word(p['jp']):
+                    key = p['cn']
+                    if key not in seen_cn:
+                        seen_cn.add(key)
+                        kata_pool.append(p)
+            for p in self.all_words:
+                if self.is_katakana_word(p['jp']):
+                    key = p['cn']
+                    if key not in seen_cn:
+                        seen_cn.add(key)
+                        kata_pool.append(p)
             wrong = []
             for p in kata_pool:
                 if p['cn'] != correct and p['cn'] not in wrong:
                     wrong.append(p['cn'])
                 if len(wrong) >= 3:
                     break
-            while len(wrong) < 3:
-                wrong.append("---")
             opts = [correct] + wrong[:3]
             random.shuffle(opts)
             return opts
-        else:  # mode == 6 外来语 中译日
+        
+        else:  # mode == 6
             correct = w['jp']
-            kata_pool = [p for p in base_pool if self.is_katakana_word(p['jp'])]
+            kata_pool = []
+            seen_jp = set()
+            for p in base_pool:
+                if self.is_katakana_word(p['jp']):
+                    key = p['jp']
+                    if key not in seen_jp:
+                        seen_jp.add(key)
+                        kata_pool.append(p)
+            for p in self.all_words:
+                if self.is_katakana_word(p['jp']):
+                    key = p['jp']
+                    if key not in seen_jp:
+                        seen_jp.add(key)
+                        kata_pool.append(p)
             wrong = []
             for p in kata_pool:
                 if p['jp'] != correct and p['jp'] not in wrong:
                     wrong.append(p['jp'])
                 if len(wrong) >= 3:
                     break
-            while len(wrong) < 3:
-                wrong.append("---")
             opts = [correct] + wrong[:3]
             random.shuffle(opts)
             return opts
@@ -737,7 +814,7 @@ class QuizApp:
         elif mode == 2:
             correct = w['pos']
         elif mode == 3:
-            correct = w['reading']
+            correct = self.clean_reading(w['reading'])
         elif mode == 4:
             correct = w['jp']
         elif mode == 5:
@@ -796,7 +873,7 @@ class QuizApp:
         elif mode == 2:
             correct = w['pos']
         elif mode == 3:
-            correct = w['reading']
+            correct = self.clean_reading(w['reading'])
         elif mode == 4:
             correct = w['jp']
         elif mode == 5:
