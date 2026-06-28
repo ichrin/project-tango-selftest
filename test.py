@@ -12,7 +12,7 @@ class QuizApp:
     def __init__(self, root):
         self.root = root
         self.root.title("单词小测")
-        self.root.geometry("720x600")
+        self.root.geometry("1280x720")
         
         # 数据
         self.all_words = []
