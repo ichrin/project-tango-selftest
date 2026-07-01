@@ -249,8 +249,8 @@ class QuizApp:
         
         for cat_name, pos_list in pos_categories:
             cat_frame = tk.Frame(self.pos_frame)
-            cat_frame.pack(fill=tk.X, padx=5, pady=2)
-            tk.Label(cat_frame, text=cat_name+":", font=("微软雅黑", 8), width=6).pack(side=tk.LEFT)
+            cat_frame.pack(fill=tk.X, padx=6, pady=2)
+            tk.Label(cat_frame, text=cat_name+":", font=("微软雅黑", 8), width=3).pack(side=tk.LEFT)
             for p in pos_list:
                 if p in self.pos_filters:
                     cb = tk.Checkbutton(cat_frame, text=p, variable=self.pos_filters[p],
